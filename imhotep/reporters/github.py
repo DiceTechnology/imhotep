@@ -6,8 +6,9 @@ log = logging.getLogger(__name__)
 
 
 class GitHubReporter(Reporter):
-    def __init__(self, requester):
+    def __init__(self, requester, repo_name):
         self._comments = []
+        self.repo_name = repo_name
         self.requester = requester
 
     def clean_already_reported(self, comments, file_name, position,
@@ -17,9 +18,9 @@ class GitHubReporter(Reporter):
         converted into a string.
         """
         for comment in comments:
-            if ((comment['path'] == file_name
-                 and comment['position'] == position
-                 and comment['user']['login'] == self.requester.username)):
+            if ((comment['path'] == file_name and
+                 comment['position'] == position and
+                 comment['user']['login'] == self.requester.username)):
 
                 return [m for m in message if m not in comment['body']]
         return message
@@ -44,11 +45,10 @@ class GitHubReporter(Reporter):
 
 
 class CommitReporter(GitHubReporter):
-    def report_line(self, repo_name, commit, file_name, line_number, position,
-                    message):
+    def report_line(self, commit, file_name, line_number, position, message):
         report_url = (
             'https://api.github.com/repos/%s/commits/%s/comments'
-            % (repo_name, commit))
+            % (self.repo_name, commit))
         comments = self.get_comments(report_url)
         message = self.clean_already_reported(comments, file_name,
                                               position, message)
@@ -65,15 +65,14 @@ class CommitReporter(GitHubReporter):
 
 
 class PRReporter(GitHubReporter):
-    def __init__(self, requester, pr_number):
+    def __init__(self, requester, repo_name, pr_number):
         self.pr_number = pr_number
-        super(PRReporter, self).__init__(requester)
+        super(PRReporter, self).__init__(requester, repo_name)
 
-    def report_line(self, repo_name, commit, file_name, line_number, position,
-                    message):
+    def report_line(self, commit, file_name, line_number, position, message):
         report_url = (
             'https://api.github.com/repos/%s/pulls/%s/comments'
-            % (repo_name, self.pr_number))
+            % (self.repo_name, self.pr_number))
         comments = self.get_comments(report_url)
         if isinstance(message, string_types):
             message = [message]
@@ -93,4 +92,25 @@ class PRReporter(GitHubReporter):
         result = self.requester.post(report_url, payload)
         if result.status_code >= 400:
             log.error("Error posting line to github. %s", result.json())
+        return result
+
+    def is_already_posted(self, message):
+        # Whether a particular message has already been reporter by the bot
+        report_url = (
+            'https://api.github.com/repos/%s/pulls/%s/comments'
+            % (self.repo_name, self.pr_number))
+        comments = self.get_comments(report_url)
+        return len([c for c in comments if c['body'] == message]) > 0
+
+    def post_comment(self, message):
+        """
+        Comments on an issue, not on a particular line.
+        """
+        report_url = (
+            'https://api.github.com/repos/%s/issues/%s/comments'
+            % (self.repo_name, self.pr_number)
+        )
+        result = self.requester.post(report_url, {'body': message})
+        if result.status_code >= 400:
+            log.error("Error posting comment to github. %s", result.json())
         return result
