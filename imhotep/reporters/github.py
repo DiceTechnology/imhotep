@@ -40,8 +40,11 @@ class GitHubReporter(Reporter):
         """Convert message from list to string for GitHub API."""
         final_message = ''
         for submessage in message:
-            final_message += '* {submessage}\n'.format(submessage=submessage)
+            final_message += '{submessage}\n'.format(submessage=self.format_with_emojis(submessage))
         return final_message
+
+    def format_with_emojis(self, message):
+        return message.replace("Error - ", ":no_entry_sign: ").replace("Warning - ", ":warning: ").replace("(", "`").replace(")", "`")
 
 
 class CommitReporter(GitHubReporter):
@@ -100,7 +103,7 @@ class PRReporter(GitHubReporter):
             'https://api.github.com/repos/%s/pulls/%s/comments'
             % (self.repo_name, self.pr_number))
         comments = self.get_comments(report_url)
-        return len([c for c in comments if c['body'] == message]) > 0
+        return len([c for c in comments if message not in c['body']]) > 0
 
     def post_comment(self, message):
         """
