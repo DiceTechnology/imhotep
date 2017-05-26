@@ -118,11 +118,7 @@ class Imhotep(object):
             error_count = 0
 
             # Warm up message
-            warmup_message = """
-            Hi there!\n\n
-            I'm your linting bot and I'm going to check your changes using
-             the repository configuration - please bear with me :nerd_face:
-            """
+            warmup_message = "Hi there!\n\nI'm your linting bot and I'm going to check your changes using the repository configuration - please bear with me :nerd_face:"
 
             if not reporter.is_already_posted(warmup_message):
                 reporter.post_comment(warmup_message)
@@ -140,8 +136,10 @@ class Imhotep(object):
                     violating_lines)
                 for x in matching_numbers:
                     error_count += 1
+                    if error_count > max_errors:
+                        continue
                     reporter.report_line(
-                        repo.name, cinfo.origin, entry.result_filename,
+                        cinfo.origin, entry.result_filename,
                         x, pos_map[x], violations['%s' % x])
 
                 if error_count > max_errors \
@@ -149,10 +147,11 @@ class Imhotep(object):
                     reporter.post_comment(
                         "There were too many ({error_count}) linting errors to"
                         " continue.".format(error_count=error_count))
-                elif error_count == 0:
-                    reporter.post_comment("Nothing to raise! Bravo! :tada:")
 
                 log.info("%d violations.", error_count)
+            
+            if error_count == 0:
+                reporter.post_comment("Nothing to raise! Bravo! :tada:")
         finally:
             self.manager.cleanup()
 
