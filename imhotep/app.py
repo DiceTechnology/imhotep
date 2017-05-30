@@ -86,9 +86,9 @@ class Imhotep(object):
         if self.no_post:
             return PrintingReporter()
         if self.pr_number:
-            return PRReporter(self.requester, self.pr_number)
+            return PRReporter(self.requester, self.repo_name, self.pr_number)
         elif self.commit is not None:
-            return CommitReporter(self.requester)
+            return CommitReporter(self.requester, self.repo_name)
 
     def get_filenames(self, entries, requested_set=None):
         filenames = set([x.result_filename for x in entries])
@@ -96,7 +96,7 @@ class Imhotep(object):
             filenames = requested_set.intersection(filenames)
         return list(filenames)
 
-    def invoke(self):
+    def invoke(self, reporter=None, max_errors=float('inf')):
         cinfo = self.commit_info
         reporter = self.get_reporter()
 
@@ -116,6 +116,13 @@ class Imhotep(object):
                                    filenames=filenames)
 
             error_count = 0
+
+            # Warm up message
+            warmup_message = "Hi there!\n\nI'm your linting bot and I'm going to check your changes using the repository configuration - please bear with me :nerd_face:"
+
+            if not reporter.is_already_posted(warmup_message):
+                reporter.post_comment(warmup_message)
+
             for entry in parse_results:
                 added_lines = [l.number for l in entry.added_lines]
                 pos_map = {}
@@ -129,11 +136,22 @@ class Imhotep(object):
                     violating_lines)
                 for x in matching_numbers:
                     error_count += 1
+                    if error_count > max_errors:
+                        continue
                     reporter.report_line(
-                        repo.name, cinfo.origin, entry.result_filename,
+                        cinfo.origin, entry.result_filename,
                         x, pos_map[x], violations['%s' % x])
 
+                if error_count > max_errors \
+                   and hasattr(reporter, 'post_comment'):
+                    reporter.post_comment(
+                        "There were too many ({error_count}) linting errors to"
+                        " continue.".format(error_count=error_count))
+
                 log.info("%d violations.", error_count)
+            
+            if error_count == 0:
+                reporter.post_comment("Nothing to raise! Bravo! :tada:")
         finally:
             self.manager.cleanup()
 
